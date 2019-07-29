@@ -157,16 +157,23 @@ class LVAP:
             self.log.error("Xid %u not in pending list, ignoring", xid)
             return
 
-        if self.state != PROCESS_REMOVING:
+        if self.state not in [PROCESS_REMOVING]:
             self.log.error("Del lvap response received in state %s, ignoring",
                            self.state)
             return
 
         self.pending.remove(xid)
 
-        # all pending processed
-        if not self.pending:
+        # there are still pending transactions
+        if self.pending:
+            return
+
+        # all blocks added, transition to spawning state
+        if self.target_blocks:
             self.state = PROCESS_SPAWNING
+            return
+
+        self.log.error("Del lvap response received without target blocks")
 
     def handle_add_lvap_response(self, xid, _):
         """Received as result of a add lvap command."""
@@ -175,16 +182,29 @@ class LVAP:
             self.log.error("Xid %u not in pending list, ignoring", xid)
             return
 
-        if self.state != PROCESS_SPAWNING:
+        if self.state not in [PROCESS_SPAWNING, PROCESS_RUNNING]:
             self.log.error("Add lvap response received in state %s, ignoring",
                            self.state)
             return
 
         self.pending.remove(xid)
 
-        # all pending processed
-        if not self.pending:
-            self.state = PROCESS_RUNNING
+        # there are still pending transactions
+        if self.pending:
+            return
+
+        # all blocks add, transition to running state
+        self.state = PROCESS_RUNNING
+
+        # this add was the result of a handover, trigger event
+        if self.state == PROCESS_RUNNING \
+                and self.source_blocks \
+                and self.source_blocks[0] is not None:
+
+            self.blocks[0].radio.connection.server.\
+                send_lvap_handover_message_to_self(self, self.source_blocks)
+
+            self.source_blocks = None
 
     @property
     def state(self):
@@ -196,8 +216,8 @@ class LVAP:
     def state(self, state):
         """Set the CPP."""
 
-        self.log.info("LVAP %s transition %s->%s", self.addr, self.state,
-                      state)
+        #self.log.info("LVAP %s transition %s->%s", self.addr, self.state,
+        #              state)
 
         if self.state:
             method = "_%s_%s" % (self.state, state)
@@ -279,6 +299,10 @@ class LVAP:
         # reset uplink and downlink
         self._downlink = None
         self._uplink = []
+
+    def _running_running(self):
+
+        pass
 
     def commit(self):
         """Send add lvap message for downlink and uplinks blocks."""
@@ -434,9 +458,10 @@ class LVAP:
             self.association_state = False
             self.authentication_state = False
 
-        # save target block
+        # save source blocks
         self.source_blocks = self.blocks
-        # save target block
+
+        # save target blocks
         self.target_blocks = pool
 
         if self.state is None:
@@ -467,8 +492,7 @@ class LVAP:
         dl_block.radio.connection.send_set_transmission_policy(txp)
 
         # send add_lvap message
-        xid = dl_block.radio.connection.send_add_lvap(self, dl_block, True)
-        self.pending.append(xid)
+        dl_block.radio.connection.send_add_lvap(self, dl_block, True)
 
         # save block
         self._downlink = dl_block
@@ -479,8 +503,7 @@ class LVAP:
         for block in ul_blocks:
 
             # send add_lvap message
-            xid = block.radio.connection.send_add_lvap(self, block, False)
-            self.pending.append(xid)
+            block.radio.connection.send_add_lvap(self, block, False)
 
             # save block into the list
             self._uplink.append(block)

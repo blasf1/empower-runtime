@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 #
-# Copyright (c) 2018 Roberto Riggio
+# Copyright (c) 2019 Giovanni Baggio
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -15,23 +15,4 @@
 # specific language governing permissions and limitations
 # under the License.
 
-"""EmPOWER utils."""
-
-import random
-
-
-def get_module(module):
-    """Get an empower module or return None."""
-
-    from empower.main import RUNTIME
-
-    if module not in RUNTIME.components:
-        return None
-
-    return RUNTIME.components[module]
-
-
-def get_xid():
-    """Return randon 32bits integers to be used as xid."""
-
-    return random.getrandbits(32)
+"""InfluxDB stats sender Module."""

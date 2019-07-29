@@ -141,8 +141,8 @@ class LVAPStats(ModulePeriodic):
                               module_id=self.module_id,
                               sta=lvap.addr.to_raw())
 
-        self.log.info("Sending rates request to %s @ %s (id=%u)",
-                      lvap.addr, lvap.wtp.addr, self.module_id)
+        # self.log.info("Sending rates request to %s @ %s (id=%u)",
+        #               lvap.addr, lvap.wtp.addr, self.module_id)
 
         msg = RATES_REQUEST.build(rates_req)
         lvap.wtp.connection.stream.write(msg)

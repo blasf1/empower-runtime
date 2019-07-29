@@ -28,6 +28,8 @@ from construct import UBInt16
 from construct import UBInt32
 from construct import Array
 
+from datetime import datetime
+
 from empower.datatypes.etheraddress import EtherAddress
 from empower.lvapp.lvappserver import ModuleLVAPPWorker
 from empower.core.module import ModulePeriodic
@@ -63,15 +65,15 @@ STATS_RESPONSE = \
 
 
 class BinCounter(ModulePeriodic):
-    """ PacketsCounter object.
+    """BinCounter object.
 
     This primitive tracks the packets/bytes sent and received by a LVAP (which
     is the virtual AP running in the WTP). Traffic is classified in the
     specifed bins.
 
-    For example:
+    For example (from within an app):
         self.bin_counter(bins=[512, 1514, 8192],
-                         2000,
+                         every=2000,
                          callback=self.counters_callback)
 
     This classifies the traffic TX/RX by the client lvap into the specified
@@ -79,7 +81,7 @@ class BinCounter(ModulePeriodic):
     first bin there will be all the packets whose length is smaller than or
     uqual to 512 bytes, in the second bin there will be all the packets whose
     length is smaller than or equal to 1514 bytes, in the last bin there will
-    be all the packets whose length is smaller than or equal to 8192 bytes,
+    be all the packets whose length is smaller than or equal to 8192 bytes.
     """
 
     MODULE_NAME = "bin_counter"
@@ -196,9 +198,9 @@ class BinCounter(ModulePeriodic):
                               module_id=self.module_id,
                               sta=lvap.addr.to_raw())
 
-        self.log.info("Sending %s request to %s @ %s (id=%u)",
-                      self.MODULE_NAME, lvap.addr, lvap.wtp.addr,
-                      self.module_id)
+        # self.log.info("Sending %s request to %s @ %s (id=%u)",
+        #               self.MODULE_NAME, lvap.addr, lvap.wtp.addr,
+        #               self.module_id)
 
         msg = STATS_REQUEST.build(stats_req)
         lvap.wtp.connection.stream.write(msg)
@@ -210,8 +212,8 @@ class BinCounter(ModulePeriodic):
 
         [[60, 3], [66, 2], [74, 1], [98, 40], [167, 2], [209, 2], [1466, 1762]]
 
-        Each 2-tuple has format [ size, count ] where count is the number of
-        size-long (bytes, including the Ethernet 2 header) TX/RX by the LVAP.
+        Each 2-tuple has format [ size, count ] where count is the number of packets and
+        size is the size-long (bytes, including the Ethernet 2 header) TX/RX by the LVAP.
 
         """
 
@@ -237,8 +239,8 @@ class BinCounter(ModulePeriodic):
 
         [[60, 3], [66, 2], [74, 1], [98, 40], [167, 2], [209, 2], [1466, 1762]]
 
-        Each 2-tuple has format [ size, count ] where count is the number of
-        size-long (bytes, including the Ethernet 2 header) TX/RX by the LVAP.
+        Each 2-tuple has format [ size, count ] where count is the number of packets and
+        size is the size-long (bytes, including the Ethernet 2 header) TX/RX by the LVAP.
 
         """
 
@@ -246,7 +248,7 @@ class BinCounter(ModulePeriodic):
         out = [0] * len(self.bins)
 
         for entry in samples:
-            if entry:
+            if not entry:
                 continue
             size = entry[0]
             count = entry[1]
@@ -303,6 +305,42 @@ class BinCounter(ModulePeriodic):
                 self.update_stats(delta, old_tx_packets, self.tx_packets)
             self.rx_packets_per_second = \
                 self.update_stats(delta, old_rx_packets, self.rx_packets)
+
+        samples = []
+        timestamp = datetime.utcnow()
+        for index in range(0, len(self.bins)):
+
+            data = {
+                'tx_bytes': self.tx_bytes[index],
+                'rx_bytes': self.rx_bytes[index],
+                'tx_packets': self.tx_packets[index],
+                'rx_packets': self.rx_packets[index]
+            }
+            if self.last:
+                data = {**data,
+                        'tx_bytes_per_second':
+                            self.tx_bytes_per_second[index],
+                        'rx_bytes_per_second':
+                            self.rx_bytes_per_second[index],
+                        'tx_packets_per_second':
+                            self.tx_packets_per_second[index],
+                        'rx_packets_per_second':
+                            self.rx_packets_per_second[index],
+                        }
+
+            sample = {
+                "measurement": "counter",
+                "tags": {
+                    "tenant": str(self.tenant_id),
+                    "lvap": str(self.lvap),
+                    "bin": self.bins[index]
+                },
+                "time": timestamp,
+                "fields": data
+            }
+            samples.append(sample)
+
+        self.update_db(samples)
 
         self.last = time.time()
 

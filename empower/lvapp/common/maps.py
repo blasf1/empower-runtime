@@ -169,8 +169,8 @@ class Maps(ModulePeriodic):
                         channel=self.block.channel,
                         band=self.block.band)
 
-        self.log.info("Sending %s request to %s (id=%u)",
-                      self.MODULE_NAME, self.block, self.module_id)
+        # self.log.info("Sending %s request to %s (id=%u)",
+        #               self.MODULE_NAME, self.block, self.module_id)
 
         msg = POLLER_REQUEST.build(req)
         wtp.connection.stream.write(msg)

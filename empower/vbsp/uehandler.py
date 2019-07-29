@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 #
-# Copyright (c) 2016 Supreeth Herle
+# Copyright (c) 2016 Roberto Riggio
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -83,23 +83,23 @@ class UEHandler(EmpowerAPIHandlerUsers):
             ue_id = uuid.UUID(args[0])
             ue = RUNTIME.ues[ue_id]
 
-            if "vbs" in request:
+            if "cell" in request and "vbs" in request:
+
+                vbs_addr = EtherAddress(request['vbs'])
+                vbs = RUNTIME.vbses[vbs_addr]
+                pci = int(request['cell']['pci'])
+                ue.cell = vbs.cells[pci]
+
+            elif "vbs" in request:
 
                 vbs_addr = EtherAddress(request['vbs'])
                 vbs = RUNTIME.vbses[vbs_addr]
                 ue.vbs = vbs
 
-            elif "cell" in request:
+            if "slice" in request:
 
-                vbs_addr = EtherAddress(request['cell']['vbs'])
-                vbs = RUNTIME.vbses[vbs_addr]
-                pci = int(request['cell']['pci'])
-                ue.cell = vbs.cells[pci]
-
-            if "slices" in request:
-
-                # Either a slice or a set of slices are admitted.
-                ue.slices = request['slices']
+                # Just a slice is admitted.
+                ue.slice = request['slice']
 
         except KeyError as ex:
             self.send_error(404, message=ex)

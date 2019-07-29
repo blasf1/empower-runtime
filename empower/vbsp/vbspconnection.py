@@ -20,6 +20,7 @@
 import uuid
 import time
 import tornado.ioloop
+from tornado.iostream import StreamClosedError
 
 from construct import Container
 
@@ -45,7 +46,6 @@ from empower.vbsp import EP_ACT_UE_REPORT
 from empower.vbsp import UE_REPORT_REQUEST
 from empower.vbsp import UE_REPORT_TYPES
 from empower.vbsp import EP_UE_REPORT_IDENTITY
-from empower.vbsp import EP_UE_REPORT_STATE
 from empower.vbsp import EP_OPERATION_ADD
 from empower.vbsp import EP_ACT_HANDOVER
 from empower.vbsp import ENB_CAPS_TYPES
@@ -66,7 +66,6 @@ from empower.vbsp import REM_RAN_MAC_SLICE_REQUEST
 from empower.vbsp import SET_RAN_MAC_SLICE_REQUEST
 from empower.core.cellpool import Cell
 from empower.core.ue import UE
-from empower.core.ue import UE_REPORT_STATES
 from empower.core.utils import get_xid
 
 from empower.main import RUNTIME
@@ -119,18 +118,25 @@ class VBSPConnection:
                               self.addr)
                 self.stream.close()
 
-    def _on_read(self, line):
+    def _on_read(self, future):
         """ Appends bytes read from socket to a buffer. Once the full packet
         has been read the parser is invoked and the buffers is cleared. The
         parsed packet is then passed to the suitable method or dropped if the
         packet type in unknown. """
 
-        self.__buffer = self.__buffer + line
+        try:
+            line = future.result()
+            self.__buffer = self.__buffer + line
+        except StreamClosedError as stream_ex:
+            self.log.error(stream_ex)
+            return
+
         hdr = HEADER.parse(self.__buffer)
 
         if len(self.__buffer) < hdr.length:
             remaining = hdr.length - len(self.__buffer)
-            self.stream.read_bytes(remaining, self._on_read)
+            future = self.stream.read_bytes(remaining)
+            future.add_done_callback(self._on_read)
             return
 
         try:
@@ -209,7 +215,8 @@ class VBSPConnection:
         """ Wait for incoming packets on signalling channel """
 
         self.__buffer = b''
-        self.stream.read_bytes(HEADER.sizeof(), self._on_read)
+        future = self.stream.read_bytes(HEADER.sizeof())
+        future.add_done_callback(self._on_read)
 
     def _on_disconnect(self):
         """ Handle VBS disconnection """
@@ -427,6 +434,16 @@ class VBSPConnection:
 
             if raw_entry.type == EP_UE_REPORT_IDENTITY:
 
+                # NOTE: These ID generation should fallback to a data-type like for PLMNID
+                imsi_id = uuid.UUID(int=option.imsi)
+                tmsi_id = uuid.UUID(int=option.tmsi)
+
+                # VBS can have multiple carriers (cells), and each carrier can allocate
+                # its own RNTI range independently. This means that on UUID generation
+                # by RNTI you can get multiple different UEs with the same UUID if only
+                # RNTI is considered. This gives to the ID a little of context.
+                rnti_id = uuid.UUID(int=vbs.addr.to_int() << 32 | hdr.cellid << 16 | option.rnti)
+
                 plmn_id = PLMNID(option.plmn_id)
                 tenant = RUNTIME.load_tenant_by_plmn_id(plmn_id)
 
@@ -434,24 +451,61 @@ class VBSPConnection:
                     self.log.info("Unknown tenant %s", plmn_id)
                     continue
 
-                # TODO: Implement fallback mechanism IMSI->TMSI->RNTI
-                ue_id = uuid.UUID(int=option.imsi)
+                # Basic fallback mechanism for UE unique ID generation
+                #
+                # IMSI
+                #   UE ID is generated using the Subscriber Identity, thus it
+                #   will remain stable through multiple connection/disconnection
+                if option.imsi != 0:
+                    ue_id = imsi_id
+
+                # TMSI
+                #   UE ID is generated using Temporary ID assigned by the Core
+                #   Network, and will be stable depending on the CN ID generation
+                #   behavior
+                elif option.tmsi != 0:
+                    ue_id = tmsi_id
+
+                # RNTI
+                #   UE ID is generated using the Radio Network Temporary
+                #   Identifier. This means that at any event where such identifier
+                #   is changed update, the UE ID will potentially will change too
+                else:
+                    ue_id = rnti_id
 
                 # UE already known, update its parameters
                 if ue_id in RUNTIME.ues:
 
                     ue = RUNTIME.ues[ue_id]
-                    ue.rnti = option.rnti
+
+                    # RNTI must always be set, but just in case handle the event
+                    if option.rnti != 0:
+                        ue.rnti = option.rnti
+                    else:
+                        self.log.info("UE is missing RNTI identifier!")
+                        continue
+
+                    # Update the TMSI if has been renew for some reason
+                    if option.tmsi != 0:
+                        ue.tmsi = option.tmsi
+
+                    # Fill IMSI only if it was not previously set
+                    if option.imsi != 0 and ue.imsi != 0:
+                        ue.imsi = option.imsi
 
                     # UE is disconnecting
                     if option.state == 1:
                         RUNTIME.remove_ue(ue_id)
 
+                # UE not known
                 else:
+                    # Reporting on and entry which switched to offline; ignore
+                    if option.state == 1:
+                        continue
 
                     cell = vbs.cells[hdr.cellid]
 
-                    ue = UE(ue_id, option.rnti, option.imsi, option.timsi,
+                    ue = UE(ue_id, option.rnti, option.imsi, option.tmsi,
                             cell, tenant)
 
                     RUNTIME.ues[ue.ue_id] = ue
@@ -574,13 +628,13 @@ class VBSPConnection:
                     # if the UE was attached to this slice, but it is not
                     # in the information given by the eNB, it should be
                     # deleted.
-                    if slc.dscp in ue.slices and ue.rnti not in rntis:
-                        ue.remove_slice(slc.dscp)
+                    if slc.dscp == ue.slice and ue.rnti not in rntis:
+                        ue.slice = DSCP("0x00")
 
                     # if the UE was not attached to this slice, but its RNTI
                     # is provided by the eNB for this slice, it should added.
-                    if slc.dscp not in ue.slices and ue.rnti in rntis:
-                        ue.add_slice(slc.dscp)
+                    elif slc.dscp != ue.slice and ue.rnti in rntis:
+                        ue.slice = slc.dscp
 
         self.log.info("Slice %s updated", slc)
 
@@ -742,18 +796,8 @@ class VBSPConnection:
             # before deleting the current slice
             for ue in list(RUNTIME.ues.values()):
 
-                if self.vbs == ue.vbs and dscp in ue.slices:
-
-                    current_slices = [x for x in ue.slices]
-                    current_slices.remove(DSCP(dscp))
-
-                    if not current_slices:
-                        default_slice = tenant.slices[DSCP("0x00")]
-
-                        if default_slice:
-                            current_slices.append(DSCP("0x00"))
-
-                    ue.slices = current_slices
+                if self.vbs == ue.vbs and dscp == ue.slice:
+                    ue.slice = DSCP("0x00")
         else:
             self.log.warning("DSCP %s not found. Removing slice.", dscp)
 

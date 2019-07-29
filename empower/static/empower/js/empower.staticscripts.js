@@ -1,13 +1,15 @@
 function createNavbar(){
     var navbar = __HB.ceROW();
+    $( navbar ).addClass("vertical-align");
     if( __ROLE === "admin"){    $( navbar ).css("backgroundColor", ADMIN); }
     else{                       $( navbar ).css("backgroundColor", USER); }
 
-        var c0 = __HB.ceCOL("xs", 6);
+        var c0 = __HB.ceCOL("xs", 5);
+        $( c0 ).addClass("text-center");
         $( navbar ).append(c0);
             var r0 = __HB.ceROW();
             $( c0 ).append(r0);
-            $( r0 ).css("padding-top", "5px");
+            $( r0 ).css("padding", "5px");
                 var c00 = __HB.ceCOL("xs",6);
                 $( r0 ).append(c00);
                 var c01 = __HB.ceCOL("xs",6);
@@ -16,6 +18,7 @@ function createNavbar(){
     var navbarBrand = __HB.ce("DIV");
                     $( c00 ).append(navbarBrand);
         $( navbarBrand ).addClass("navbar-header");
+        $( navbarBrand ).css("width", "250px");
 //                    $( navbarBrand ).attr("style","display:block; padding: 10px 2%; float:left;");
         var navbarBrandA = __HB.ce("A");
         $( navbarBrand ).append(navbarBrandA);
@@ -28,10 +31,10 @@ function createNavbar(){
                 $( navbarBrandAImg ).attr("style", "float:left");
                             var navbarBrandATxt = "&emsp;5G-EmPOWER";
             $( navbarBrandA ).append(navbarBrandATxt);
-                                var navbarTenantID = __HB.ce("SPAN")
-                                $( navbarBrandA ).append(navbarTenantID);
-                                navbarTenantID.id = "navbar_tenantname"
-                                $( navbarTenantID ).css("margin-left", "30px")
+                                // var navbarTenantID = __HB.ce("SPAN")
+                                // $( navbarBrandA ).append(navbarTenantID);
+                                // navbarTenantID.id = "navbar_tenantname"
+                                // $( navbarTenantID ).css("margin-left", "30px")
 
                     var pendingQueryStatus = __HB.ce("DIV");
                     $( c01 ).append(pendingQueryStatus);
@@ -40,24 +43,38 @@ function createNavbar(){
 //                        $( pendingQueryStatus ).addClass("hide");
                         $( pendingQueryStatus ).text(" ");
 
-        var c1 = __HB.ceCOL("xs",6);
+        var c1 = __HB.ceCOL("xs",7);
         $( navbar ).append(c1);
             var r1 = __HB.ceROW();
             $( c1 ).append(r1);
             $( r1 ).addClass("text-center");
 //            $( r1 ).addClass("nav navbar-nav navbar-right");
-            $( r1 ).css("padding", "2%");
+            $( r1 ).css("padding", "5px");
 //            $( r1 ).css("width", "400px");
 //            $( r1 ).css("float", "right");
             $( r1 ).css("color", "#FFFFFF");
-                var c10 = __HB.ceCOL("xs",6);
+
+                var c10 = __HB.ceCOL("xs",4);
+                $( c10 ).addClass("text-left vertical-align");
                 $( r1 ).append(c10);
+                var navbarTenantID = __HB.ce("SPAN")
+                $( navbarTenantID ).css("font-size", "20px");
+                $( navbarTenantID ).css("font-weight", "bold");
+                $( c10 ).append(navbarTenantID);
+                navbarTenantID.id = "navbar_tenantname"
+                // $( navbarTenantID ).css("margin-left", "30px")
+                // $( navbarTenantID ).css("padding-top", "5px");
+                $( navbarTenantID ).addClass("text-left");
+
+                var c11 = __HB.ceCOL("xs",5);
+                $( c11 ).addClass("text-right");
+                $( r1 ).append(c11);
 //                $( c10 ).css("padding", "15px 0px");
                     var span = __HB.ce("SPAN");
-                    $( c10 ).append(span);
+                    $( c11 ).append(span);
                     $( span ).text("Autorefresh: ")
                     var refresh = __HB.ce("INPUT");
-                    $( c10 ).append(refresh);
+                    $( c11 ).append(refresh);
                     $( refresh ).addClass("switch");
                     $( refresh ).attr("type", "checkbox");
                     $( refresh ).attr("data-on-text", "ON");
@@ -66,21 +83,27 @@ function createNavbar(){
                     $( refresh ).attr("data-off-color", "info");
                     $( refresh ).on('switchChange.bootstrapSwitch', __HB.wrapFunction( toggleAutoRefresh, [refresh] ));
                     $( refresh ).bootstrapSwitch()
-                var c11 = __HB.ceCOL("xs",3);
-                $( r1 ).append(c11);
-                    var user = __HB.ce("DIV");
-                    $( c11 ).append(user);
-                    $( user ).css("padding-top", "5px");
-//                    $(user).addClass("navbar-text");
-                    $(user).html("<strong>" + __USERNAME + "</strong>" + " (" + ( __ROLE==="user"? "User)":"Admin)" ) );
+                // var c11 = __HB.ceCOL("xs",3);
                 var c12 = __HB.ceCOL("xs",3);
+                $( c12 ).addClass("text-right");
+                // $( c12 ).addClass("vertical-align");
+                // $( r1 ).append(c11);
                 $( r1 ).append(c12);
-//                $( c12 ).css("padding", "15px 0px");
-                $( c12 ).css("color", "#FFFFFF");
+                    var user = __HB.ce("DIV");
+                    $( c12 ).append(user);
+                    $( user ).css("padding-top", "5px");
+                    $( user ).css("display", "inline-block");
+//                    $(user).addClass("navbar-text");
+                    $(user).html("<strong>" + __USERNAME + "</strong>" + " (" + ( __ROLE==="user"? "User)&emsp;":"Admin)&emsp;" ) );
+                // var c12 = __HB.ceCOL("xs",3);
+                // $( r1 ).append(c12);
+                // $( c12 ).css("color", "#FFFFFF");
                     var ms = __HB.ce("DIV");
                     $( c12 ).append(ms);
             $( ms ).addClass("dropdown");
                     $( ms ).css("padding-top", "5px");
+                    $( ms ).css("display", "inline-block");
+                    $( ms ).css("margin-right", "10px");
             var a = __HB.ce("A");
             $( ms ).append(a);
                 $( a ).addClass("dropdown-toggle");
@@ -94,7 +117,7 @@ function createNavbar(){
                                 $( i ).css("color", "#FFFFFF");
             var ul = __HB.ce("UL");
             $( ms ).append(ul);
-                $( ul ).addClass("dropdown-menu dropdown-user");
+            $( ul ).addClass("dropdown-menu dropdown-menu-right dropdown-user");
                 var li = __HB.ce("li");
                 $( ul ).append(li);
                     var a = __HB.ce("A");

@@ -19,6 +19,7 @@
 
 import time
 import tornado.ioloop
+from tornado.iostream import StreamClosedError
 
 from construct import Container
 
@@ -56,6 +57,7 @@ from empower.lvapp import PT_DEL_VAP
 from empower.lvapp import PT_CAPS_RESPONSE
 from empower.lvapp import PT_SLICE_STATUS_REQUEST
 from empower.lvapp import PT_ADD_VAP
+from empower.lvapp import PT_WTP_CHANNEL_UPDATE_REQUEST #TFM: import packet created in __init__.py
 from empower.core.lvap import LVAP
 from empower.core.lvap import PROCESS_RUNNING
 from empower.core.vap import VAP
@@ -74,6 +76,7 @@ from empower.lvapp import ASSOC_RESPONSE
 from empower.lvapp import DEL_SLICE
 from empower.core.tenant import T_TYPE_SHARED
 from empower.core.tenant import T_TYPE_UNIQUE
+from empower.lvapp import WTP_CHANNEL_UPDATE_REQUEST #TFM: import struct created in __init__.py
 
 from empower.main import RUNTIME
 
@@ -152,18 +155,25 @@ class LVAPPConnection:
                               self.addr)
                 self.stream.close()
 
-    def _on_read(self, line):
+    def _on_read(self, future):
         """ Appends bytes read from socket to a buffer. Once the full packet
         has been read the parser is invoked and the buffers is cleared. The
         parsed packet is then passed to the suitable method or dropped if the
         packet type in unknown. """
 
-        self.__buffer = self.__buffer + line
+        try:
+            line = future.result()
+            self.__buffer = self.__buffer + line
+        except StreamClosedError as stream_ex:
+            self.log.error(stream_ex)
+            return
+
         hdr = HEADER.parse(self.__buffer)
 
         if len(self.__buffer) < hdr.length:
             remaining = hdr.length - len(self.__buffer)
-            self.stream.read_bytes(remaining, self._on_read)
+            future = self.stream.read_bytes(remaining)
+            future.add_done_callback(self._on_read)
             return
 
         try:
@@ -203,10 +213,10 @@ class LVAPPConnection:
                               msg.seq)
                 return
 
-            self.log.info("Got %s message from %s seq %u",
-                          msg_name,
-                          EtherAddress(addr),
-                          msg.seq)
+            # self.log.info("Got %s message from %s seq %u",
+            #               msg_name,
+            #               EtherAddress(addr),
+            #               msg.seq)
 
             valid = [PT_HELLO, PT_CAPS_RESPONSE]
             if not wtp.is_online() and msg_type not in valid:
@@ -226,7 +236,8 @@ class LVAPPConnection:
     def _wait(self):
         """ Wait for incoming packets on signalling channel """
         self.__buffer = b''
-        self.stream.read_bytes(6, self._on_read)
+        future = self.stream.read_bytes(6)
+        future.add_done_callback(self._on_read)
 
     def _on_disconnect(self):
         """ Handle WTP disconnection """
@@ -272,10 +283,10 @@ class LVAPPConnection:
         msg.seq = self.wtp.seq
         msg.type = msg_type
 
-        self.log.info("Sending %s message to %s seq %u",
-                      parser.name,
-                      self.wtp,
-                      msg.seq)
+        # self.log.info("Sending %s message to %s seq %u",
+        #               parser.name,
+        #               self.wtp,
+        #               msg.seq)
 
         self.stream.write(parser.build(msg))
 
@@ -300,15 +311,6 @@ class LVAPPConnection:
         lvap = RUNTIME.lvaps[sta]
 
         lvap.handle_add_lvap_response(status.module_id, status.status)
-
-        if lvap.state == PROCESS_RUNNING \
-                and lvap.source_blocks \
-                and lvap.source_blocks \
-                and lvap.source_blocks[0] is not None:
-
-            self.server.send_lvap_handover_message_to_self(lvap,
-                                                           lvap.source_blocks)
-            lvap.source_blocks = None
 
     @classmethod
     def _handle_del_lvap_response(cls, _, status):
@@ -450,8 +452,8 @@ class LVAPPConnection:
             # send slices configuration
             for slc in tenant.slices.values():
 
-                if not slc.wifi['wtps'] or \
-                    (slc.wifi['wtps'] and self.wtp.addr in slc.wifi['wtps']):
+                if (not slc.wifi['wtps'] or slc.wifi['wtps'] and
+                        self.wtp.addr in slc.wifi['wtps']):
 
                     for block in self.wtp.supports:
                         self.wtp.connection.send_set_slice(block, slc)
@@ -480,10 +482,10 @@ class LVAPPConnection:
         # Requested BSSID
         incoming_ssid = SSID(request.ssid)
 
-        if incoming_ssid == b'':
-            self.log.info("Probe request from %s ssid %s", sta, "Broadcast")
-        else:
-            self.log.info("Probe request from %s ssid %s", sta, incoming_ssid)
+        # if incoming_ssid == b'':
+        #     self.log.info("Probe request from %s ssid %s", sta, "Broadcast")
+        # else:
+        #     self.log.info("Probe request from %s ssid %s", sta, incoming_ssid)
 
         # generate list of available networks
         networks = list()
@@ -774,7 +776,7 @@ class LVAPPConnection:
         tx_policy.set_ur_count(status.ur_mcast_count)
         tx_policy.set_no_ack(status.flags.no_ack)
 
-        self.log.info("Tranmission policy status %s", tx_policy)
+        #self.log.info("Tranmission policy status %s", tx_policy)
 
     def _handle_status_slice(self, wtp, status):
         """Handle an incoming STATUS_SLICE message.
@@ -793,6 +795,9 @@ class LVAPPConnection:
             self.log.info("Slice status from unknown tenant %s", ssid)
             return
 
+        if not wtp.is_online():
+            return
+
         # Check if block is valid
         valid = wtp.get_block(status.hwaddr, status.channel, status.band)
 
@@ -807,25 +812,26 @@ class LVAPPConnection:
             return
 
         slc = tenant.slices[dscp]
+        prop = slc.wifi['static-properties']
 
-        if slc.wifi['static-properties']['quantum'] != status.quantum:
+        if prop['quantum'] != status.quantum:
+            if wtp.addr not in slc.wifi['wtps']:
+                slc.wifi['wtps'][wtp.addr] = {'static-properties': {}}
+            slc.wifi['wtps'][wtp.addr]['static-properties']['quantum'] = status.quantum
+
+        if prop['amsdu_aggregation'] != bool(status.flags.amsdu_aggregation):
 
             if wtp.addr not in slc.wifi['wtps']:
                 slc.wifi['wtps'][wtp.addr] = {'static-properties': {}}
+            slc.wifi['wtps'][wtp.addr]['static-properties']['amsdu_aggregation'] = \
+                bool(status.flags.amsdu_aggregation)
 
-                slc.wifi['wtps'][wtp.addr]['static-properties']['quantum'] = \
-                status.quantum
-
-        if slc.wifi['static-properties']['amsdu_aggregation'] != \
-            bool(status.flags.amsdu_aggregation):
-
+        if prop['scheduler'] != status.scheduler:
             if wtp.addr not in slc.wifi['wtps']:
                 slc.wifi['wtps'][wtp.addr] = {'static-properties': {}}
+            slc.wifi['wtps'][wtp.addr]['static-properties']['scheduler'] = status.scheduler
 
-            slc.wifi['wtps'][wtp.addr]['static-properties'] \
-                ['amsdu_aggregation'] = bool(status.flags.amsdu_aggregation)
-
-        self.log.info("Slice %s updated", slc)
+        # self.log.info("Slice %s updated", slc)
 
     def _handle_status_vap(self, wtp, status):
         """Handle an incoming STATUS_VAP message.
@@ -940,7 +946,7 @@ class LVAPPConnection:
                         module_id=get_xid(),
                         sta=sta.to_raw(),
                         csa_switch_mode=0,
-                        csa_switch_count=3,
+                        csa_switch_count=10,
                         csa_switch_channel=csa_switch_channel)
 
         return self.send_message(PT_DEL_LVAP, msg)
@@ -1017,7 +1023,9 @@ class LVAPPConnection:
             msg.networks.append(Container(bssid=network[0].to_raw(),
                                           ssid=network[1].to_raw()))
 
-        return self.send_message(PT_ADD_LVAP, msg)
+        xid = self.send_message(PT_ADD_LVAP, msg)
+
+        lvap.pending.append(xid)
 
     def send_bye_message_to_self(self):
         """Send a unsollicited BYE message to senf."""
@@ -1046,6 +1054,7 @@ class LVAPPConnection:
 
         amsdu_aggregation = slc.wifi['static-properties']['amsdu_aggregation']
         quantum = slc.wifi['static-properties']['quantum']
+        scheduler = slc.wifi['static-properties']['scheduler']
 
         if self.wtp.addr in slc.wifi['wtps']:
 
@@ -1057,6 +1066,9 @@ class LVAPPConnection:
             if 'quantum' in static:
                 quantum = static['quantum']
 
+            if 'scheduler' in static:
+                scheduler = static['scheduler']
+
         flags = Container(amsdu_aggregation=amsdu_aggregation)
 
         msg = Container(length=SET_SLICE.sizeof(),
@@ -1065,6 +1077,7 @@ class LVAPPConnection:
                         channel=block.channel,
                         band=block.band,
                         quantum=quantum,
+                        scheduler=scheduler,
                         dscp=slc.dscp.to_raw(),
                         ssid=ssid.to_raw())
 
@@ -1081,3 +1094,26 @@ class LVAPPConnection:
                         ssid=ssid.to_raw())
 
         return self.send_message(PT_DEL_SLICE, msg)
+
+#TFM: define function to request channel update. Creates packet (defined in __init.py__) and sends it
+    def send_channel_switch_request(self, req_channel, hwaddr, old_channel, band):
+        """Send a CHANNEL_SWITCH_ANNOUNCEMENT_TO_LVAP message.
+        Args:
+            lvap: an LVAP object
+        Returns:
+            None
+        Raises:
+            TypeError: if lvap is not an LVAP object.
+        """
+
+        response = Container(version=PT_VERSION,
+                             type=PT_WTP_CHANNEL_UPDATE_REQUEST,
+                             length=19,
+                             seq=self.wtp.seq,
+                             channel=req_channel,
+                             hwaddr=hwaddr.to_raw(),
+                             old_channel=old_channel,
+                             band=band)
+
+        msg = WTP_CHANNEL_UPDATE_REQUEST.build(response)
+        self.stream.write(msg)

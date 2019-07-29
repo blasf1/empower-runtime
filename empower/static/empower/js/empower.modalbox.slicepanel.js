@@ -3,6 +3,8 @@ class EmpSliceModalBox extends EmpModalBox{
     constructor(keys){
         super(keys);
 
+        this.toUpdate = {};
+
         this.LTEdetails = {};
         this.WIFIdetails = {};
         this.selObj = {};
@@ -41,19 +43,27 @@ class EmpSliceModalBox extends EmpModalBox{
             var key = "";
             if( datatable.row('.selected').data() ){
                 var data = datatable.row('.selected').data();
-                var tenantID = data[0].substring(11, data[0].length-14)
-                var dscp = data[1].substring(11, data[1].length-14)
+                //console.log("DATA", data);
+                //var tenantID = data[0].substring(11, data[0].length-14)
+                var tenantID = $(data[0]).attr('key').trim();
+                // var dscp = $( data[1] )[0]["attributes"]['key']['value'];
+                var dscp = $(data[1]).attr('key').trim();
+                //var dscp = data[1].substring(11, data[1].length-14)
                 var found = null;
                 for( var i=0; i<this.cache.c[tag].length; i++){
                     if( this.cache.c[tag][i]["tenant_id"] === tenantID && this.cache.c[tag][i]["dscp"] === dscp ){
                         found = this.cache.c[tag][i];
+                        break;
                     }
+                }
+                if (found === null){
+                    console.error("NOT FOUND", found);
                 }
                 this.selObj = found;
                 title = "Update " + this.hb.mapName2Title(tag);
 
-                this.WIFIdetails = this.selObj["wifi"]["wtps"];
-                this.LTEdetails = this.selObj["lte"]["vbses"];
+                this.WIFIdetails = JSON.parse(JSON.stringify(this.selObj["wifi"]["wtps"]));
+                this.LTEdetails = JSON.parse(JSON.stringify(this.selObj["lte"]["vbses"]));
                 div = this.d_SliceBodyUpdatePanel( this.selObj );
                 f = this.hb.wrapFunction(this.f_Update.bind(this), [tag]);
             }
@@ -63,6 +73,15 @@ class EmpSliceModalBox extends EmpModalBox{
 
 // ------------------- Buttons
         var buttons = [];
+
+        if( type !== "ADD" ){
+            var json = this.selObj; //this.hb.getKeyValue( tag , key);
+            var ff_Download = this.hb.wrapFunction(this.f_Download.bind(this), ["SELECTED"+obj.toUpperCase(), json]);
+            var btn_Download = {"text": "Download",
+                            "color": "primary",
+                            "f": ff_Download};
+            buttons.push(btn_Download);
+        }
 
         var btn_Save = {"text": "Save",
                          "color": "primary",
@@ -265,12 +284,16 @@ class EmpSliceModalBox extends EmpModalBox{
         var tag = this.qe.targets.SLICE;
         var div = this.hb.ce("DIV");
             var attrbts = {}
-            attrbts["sched_id"] = { "name": "Scheduler ID: ", "ph": "Type here..."};
-            attrbts["rbgs"] = { "name": "RBGs: ", "ph": "Type here..."};
+            attrbts["sched_id"] = { "name": "Scheduler ID: ", "ph": "2147483649"};
+            attrbts["rbgs"] = { "name": "RBGs: ", "ph": "6"};
+            attrbts["window"] = { "name": "Window: ", "ph": "1"};
+            attrbts["period"] = { "name": "Period: ", "ph": "1"};
             // attrbts["rntis"] = { "name": "RNTIs (inside brackets [ , ]) :", "ph": "[RNTI_1, RNTI_2, ...]"};
             if( values != null ){
                 attrbts["sched_id"]["value"] = values["lte"]["static-properties"]["sched_id"];
                 attrbts["rbgs"]["value"] = values["lte"]["static-properties"]["rbgs"];
+                attrbts["window"]["value"] = values["lte"]["static-properties"]["window"];
+                attrbts["period"]["value"] = values["lte"]["static-properties"]["period"];
                 // attrbts["rntis"]["value"] = values["lte"]["runtime-properties"]["rntis"];
             }
             for( var a in attrbts){
@@ -340,8 +363,10 @@ class EmpSliceModalBox extends EmpModalBox{
                         $( input ).css("margin", "20px 0px");
                         // New details
                         var LTEattrbts = {}
-                        LTEattrbts["sched_id"] = { "name": "Scheduler ID: ", "ph": "Type here..."};
-                        LTEattrbts["rbgs"] = { "name": "RBGs: ", "ph": "Type here..."};
+                        LTEattrbts["sched_id"] = { "name": "Scheduler ID: ", "ph": "2147483649"};
+                        LTEattrbts["rbgs"] = { "name": "RBGs: ", "ph": "6"};
+                        LTEattrbts["window"] = { "name": "Window: ", "ph": "1"};
+                        LTEattrbts["period"] = { "name": "Period: ", "ph": "1"};
                         // LTEattrbts["rntis"] = { "name": "RNTIs (inside brackets [ , ]) :", "ph": "[RNTI_1, RNTI_2, ...]"};
                         var ff_change = function(){
                             var el = selector.options[selector.selectedIndex];
@@ -394,20 +419,44 @@ class EmpSliceModalBox extends EmpModalBox{
                             this.LTEdetails[id] = {};
                             // this.LTEdetails[id]["runtime-properties"] = {};
                             this.LTEdetails[id]["static-properties"] = {};
+                            var void_fields_counter = 0;
                             for( var a in LTEattrbts){
                                 var tmp = this.hb.ge( this.getID_BODY_SLICEPANEL_ATTR(a) + "_" + id );
                                 var txt = $( tmp ).val();
                                 switch(a){
                                     case "sched_id":
+                                        if ((txt === null) || (txt === undefined) || (String(txt).length === 0)){
+                                            txt = "2147483649"
+                                        }
                                     case "rbgs":
+                                        if ((txt === null) || (txt === undefined) || (String(txt).length === 0)){
+                                            txt = "6"
+                                        }
+                                    case "window":
+                                        if ((txt === null) || (txt === undefined) || (String(txt).length === 0)){
+                                            txt = "1"
+                                        }
+                                    case "period":
+                                        if ((txt === null) || (txt === undefined) || (String(txt).length === 0)){
+                                            txt = "1"
+                                        }
                                         this.LTEdetails[id]["static-properties"][a] = txt;
+                                        // if ((txt === null) || (txt === undefined) || (String(txt).length === 0)){
+                                        //     void_fields_counter =  void_fields_counter + 1;
+                                        // }
                                         break;
                                     // case "rntis":
                                     //     this.LTEdetails[id]["runtime-properties"][a] = txt;
                                     //     break;
                                 }
                             }
-                            this.d_SliceBodyPanel_ConfigLTE(detailsLTE);
+                            if ( void_fields_counter < 4){
+                                this.d_SliceBodyPanel_ConfigLTE(detailsLTE);
+                                this.toUpdate["LTE"] = true;
+                            }
+                            else{
+                                alert("Set at least one field...")
+                            }
                         }
                     }
                     $( btn_ADD ).click( ff_ADDclick.bind(this) );
@@ -461,12 +510,31 @@ class EmpSliceModalBox extends EmpModalBox{
             $( r1 ).append(c11);
                 var i1 = this.hb.ce("INPUT");
                 $( c11 ).append(i1);
-                $( i1 ).attr("placeholder", "Type here... ")
+                $( i1 ).attr("placeholder", "12000")
                 $( i1 ).attr("size", 50)
                 i1.id = this.getID_BODY_SLICEPANEL_ATTR("quantum");
                 if( values ){
                     var value = values["wifi"]["static-properties"]["quantum"];
                     $( i1 ).val(value);
+                }
+
+            var r2 = this.hb.ceROW();
+            $( div ).append(r2);
+            $( r2 ).css("margin", "20px 0px")
+            var c20 = this.hb.ceCOL("xs", 4);
+            $( r2 ).append(c20);
+            $( c20 ).addClass("text-right");
+            $( c20 ).text( "Scheduler: " );
+            var c21 = this.hb.ceCOL("xs", 8);
+            $( r2 ).append(c21);
+                var i2 = this.hb.ce("INPUT");
+                $( c21 ).append(i2);
+                $( i2 ).attr("placeholder", "0")
+                $( i2 ).attr("size", 50)
+                i2.id = this.getID_BODY_SLICEPANEL_ATTR("scheduler");
+                if( values ){
+                    var value = values["wifi"]["static-properties"]["scheduler"];
+                    $( i2 ).val(value);
                 }
 
             var r0 = this.hb.ce("HR");
@@ -575,9 +643,24 @@ class EmpSliceModalBox extends EmpModalBox{
                                 $( r1 ).append(c11);
                                     var i1 = this.hb.ce("INPUT");
                                     $( c11 ).append(i1);
-                                    $( i1 ).attr("placeholder", "Type here... ")
+                                    $( i1 ).attr("placeholder", "12000")
                                     $( i1 ).attr("size", 50)
                                     i1.id = this.getID_BODY_SLICEPANEL_ATTR("quantum") + "_" + id;
+
+                                var r2 = this.hb.ceROW();
+                                ( col1 ).append(r2);
+                                $( r2 ).css("margin", "20px 0px")
+                                var c20 = this.hb.ceCOL("xs", 4);
+                                $( r2 ).append(c20);
+                                $( c20 ).addClass("text-right");
+                                $( c20 ).text( "Scheduler: " );
+                                var c21 = this.hb.ceCOL("xs", 8);
+                                $( r2 ).append(c21);
+                                    var i2 = this.hb.ce("INPUT");
+                                    $( c21 ).append(i2);
+                                    $( i2 ).attr("placeholder", "0")
+                                    $( i2 ).attr("size", 50)
+                                    i2.id = this.getID_BODY_SLICEPANEL_ATTR("scheduler") + "_" + id;
                         }
                         $( selector ).change(ff_change.bind(this))
                         setTimeout( function(){ $( selector ).change() }, 1/8*this.delay )
@@ -600,12 +683,26 @@ class EmpSliceModalBox extends EmpModalBox{
                                 var a = "amsdu_aggregation"
                                 var tmp = this.hb.ge( this.getID_BODY_SLICEPANEL_ATTR(a) + "_" + id );
                                 var txt = $( tmp ).text();
+                                if ((txt === null) || (txt === undefined) || (String(txt).length === 0)){
+                                    txt = "false"
+                                }
                                 this.WIFIdetails[id]["static-properties"][a] = txt;
                                 a = "quantum"
                                 tmp = this.hb.ge( this.getID_BODY_SLICEPANEL_ATTR(a) + "_" + id );
                                 txt = $( tmp ).val();
+                                if ((txt === null) || (txt === undefined) || (String(txt).length === 0)){
+                                    txt = "12000"
+                                }
+                                this.WIFIdetails[id]["static-properties"][a] = txt;
+                                a = "scheduler"
+                                tmp = this.hb.ge( this.getID_BODY_SLICEPANEL_ATTR(a) + "_" + id );
+                                txt = $( tmp ).val();
+                                if ((txt === null) || (txt === undefined) || (String(txt).length === 0)){
+                                    txt = "0"
+                                }
                                 this.WIFIdetails[id]["static-properties"][a] = txt;
 
+                                this.toUpdate["WiFi"] = true;
                                 this.d_SliceBodyPanel_ConfigWIFI(WTPdetails);
                             }
                         }
@@ -662,7 +759,7 @@ class EmpSliceModalBox extends EmpModalBox{
             $( selector ).css("height","35px");
                 // DSCP are manually controlled
                 var DSCPList = ["0x00", "0x01", "0x02", "0x03", "0x04",
-                                "0x08", "0x0A", "0x0C", "0x0C", "0x0E",
+                "0x08", "0x0A", "0x0C", "0x0E",
                                 "0x10", "0x12", "0x14", "0x16", "0x18",
                                 "0x1A", "0x1C", "0x1E", "0x20", "0x22",
                                 "0x24", "0x26", "0x28", "0x2C", "0x2E", "0x30", "0x38"];
@@ -697,8 +794,10 @@ class EmpSliceModalBox extends EmpModalBox{
                     $( title ).append(span);
                     $( span ).text( selObj["label"] + " - " + selObj["addr"] )
                 var attrbts = {}
-                attrbts["sched_id"] = { "name": "Scheduler ID: ", "ph": "Type here...", "value": this.LTEdetails[lte]["static-properties"]["sched_id"]};
-                attrbts["rbgs"] = { "name": "RBGs: ", "ph": "Type here...", "value": this.LTEdetails[lte]["static-properties"]["rbgs"]};
+                attrbts["sched_id"] = { "name": "Scheduler ID: ", "ph": "2147483649", "value": this.LTEdetails[lte]["static-properties"]["sched_id"]};
+                attrbts["rbgs"] = { "name": "RBGs: ", "ph": "6", "value": this.LTEdetails[lte]["static-properties"]["rbgs"]};
+                attrbts["window"] = { "name": "Window: ", "ph": "1", "value": this.LTEdetails[lte]["static-properties"]["window"]};
+                attrbts["period"] = { "name": "Period: ", "ph": "1", "value": this.LTEdetails[lte]["static-properties"]["period"]};
                 // attrbts["rntis"] = { "name": "RNTIs (inside brackets [ , ]) :", "ph": "[RNTI_1, RNTI_2, ...]", "value": this.LTEdetails[lte]["runtime-properties"]["rntis"]};
                 for( var a in attrbts){
                     var rr = this.hb.ceROW();
@@ -726,6 +825,7 @@ class EmpSliceModalBox extends EmpModalBox{
                     $( btn_REMOVE ).attr("style", "margin: 0px 2px;");
                     $( btn_REMOVE ).attr("title", "Remove");
                     btn_REMOVE.id = selObj["addr"]
+                    btn_REMOVE.ref = this;
                         var span_REMOVE = this.hb.ce("SPAN");
                         $( btn_REMOVE ).append(span_REMOVE);
                         $( span_REMOVE ).text("Remove this configuration")
@@ -733,6 +833,8 @@ class EmpSliceModalBox extends EmpModalBox{
                         var id = this.id;
                         delete sup.LTEdetails[id];
                         sup.d_SliceBodyPanel_ConfigLTE(cnt);
+                        // console.log("this", this)
+                        this.ref.toUpdate["LTE"] = true;
                     }
                     $( btn_REMOVE ).click( this.hb.wrapFunction( ff_REMOVEclick.bind(btn_REMOVE), this ));
         }
@@ -754,8 +856,9 @@ class EmpSliceModalBox extends EmpModalBox{
                     $( title ).append(span);
                     $( span ).text( wifi )
                 var attrbts = {}
-                attrbts["amsdu_aggregation"] = { "name": "AMSDU aggregation: ", "value": this.WIFIdetails[wifi]["static-properties"]["amsdu_aggregation"]};
-                attrbts["quantum"] = { "name": "Quantum: ", "value": this.WIFIdetails[wifi]["static-properties"]["quantum"]};
+                attrbts["amsdu_aggregation"] = { "name": "AMSDU aggregation: ", "ph": false, "value": this.WIFIdetails[wifi]["static-properties"]["amsdu_aggregation"]};
+                attrbts["quantum"] = { "name": "Quantum: ", "ph": "12000", "value": this.WIFIdetails[wifi]["static-properties"]["quantum"]};
+                attrbts["scheduler"] = { "name": "Scheduler: ", "ph": "0", "value": this.WIFIdetails[wifi]["static-properties"]["scheduler"]};
                 for( var a in attrbts){
                     var rr = this.hb.ceROW();
                     $( d ).append(rr);
@@ -770,7 +873,7 @@ class EmpSliceModalBox extends EmpModalBox{
                         if( txt && Object.keys(txt).length )
                             $( cc1 ).text( txt );
                         else{
-                            $( cc1 ).text("");
+                            $( cc1 ).text(attrbts[a].ph);
                         }
                 }
                 var ftr = this.hb.cePANEL_F();
@@ -782,6 +885,7 @@ class EmpSliceModalBox extends EmpModalBox{
                     $( btn_REMOVE ).attr("style", "margin: 0px 2px;");
                     $( btn_REMOVE ).attr("title", "Remove");
                     btn_REMOVE.id = wifi
+                    btn_REMOVE.ref = this;
                         var span_REMOVE = this.hb.ce("SPAN");
                         $( btn_REMOVE ).append(span_REMOVE);
                         $( span_REMOVE ).text("Remove this configuration")
@@ -789,6 +893,7 @@ class EmpSliceModalBox extends EmpModalBox{
                         var id = this.id;
                         delete sup.WIFIdetails[id];
                         sup.d_SliceBodyPanel_ConfigWIFI(cnt);
+                        this.ref.toUpdate["WiFi"] = true;
                     }
                     $( btn_REMOVE ).click( this.hb.wrapFunction( ff_REMOVEclick.bind(btn_REMOVE), this ));
         }
@@ -796,9 +901,12 @@ class EmpSliceModalBox extends EmpModalBox{
 // --------------------------------------------------------------------------------
 
     f_Add(){
+
+        // console.log("ADD")
+
         var tag = this.qe.targets.SLICE;
         // var attrbts = ["tenant_id", "dscp", "sched_id", "rbgs", "rntis", "amsdu_aggregation", "quantum"];
-        var attrbts = ["tenant_id", "dscp", "sched_id", "rbgs", "amsdu_aggregation", "quantum"];
+        var attrbts = ["tenant_id", "dscp", "sched_id", "rbgs", "window", "period", "amsdu_aggregation", "quantum", "scheduler"];
         var input = {};
         input["lte"] = {};
         // input["lte"]["runtime-properties"] = {};
@@ -810,23 +918,69 @@ class EmpSliceModalBox extends EmpModalBox{
         for( var i=0; i<attrbts.length; i++){
             var a = attrbts[i];
             var tmp = this.hb.ge( this.getID_BODY_SLICEPANEL_ATTR(a) );
+            var txt = null;
             switch(a){
                 case "tenant_id":
                 case "dscp":
                     input[a] = $( tmp ).text();
                     break;
                 case "rbgs":
+                    if (txt === null){
+                        txt = $( tmp ).val()
+                    }
+                    if ((txt === null) || (txt === undefined) || (String(txt).length === 0)){
+                        txt = "6"
+                    }
                 case "sched_id":
-                    input["lte"]["static-properties"][a] = $( tmp ).val();
+                    if (txt === null){
+                        txt = $( tmp ).val()
+                    }
+                    if ((txt === null) || (txt === undefined) || (String(txt).length === 0)){
+                        txt = "2147483649"
+                    }
+                case "window":
+                    if (txt === null){
+                        txt = $( tmp ).val()
+                    }
+                    if ((txt === null) || (txt === undefined) || (String(txt).length === 0)){
+                        txt = "1"
+                    }
+                case "period":
+                    if (txt === null){
+                        txt = $( tmp ).val()
+                    }
+                    if ((txt === null) || (txt === undefined) || (String(txt).length === 0)){
+                        txt = "1"
+                    }
+                    input["lte"]["static-properties"][a] = txt;
                     break;
                 // case "rntis":
                 //     input["lte"]["runtime-properties"][a] = $( tmp ).val();
                 //     break;
                 case "quantum":
-                    input["wifi"]["static-properties"][a] = $( tmp ).val();
+                    if (txt === null){
+                        txt = $( tmp ).val()
+                    }
+                    if ((txt === null) || (txt === undefined) || (String(txt).length === 0)){
+                        txt = "12000"
+                    }
+                case "scheduler":
+                    if (txt === null){
+                        txt = $( tmp ).val()
+                    }
+                    if ((txt === null) || (txt === undefined) || (String(txt).length === 0)){
+                        txt = "0"
+                    }
+                    input["wifi"]["static-properties"][a] = txt;
                     break;
                 case "amsdu_aggregation":
-                    input["wifi"]["static-properties"][a] = $( tmp ).text();
+                    if (txt === null){
+                        txt = $( tmp ).text()
+                    }
+                    if ((txt === null) || (txt === undefined) || (String(txt).length === 0)){
+                        txt = "false"
+                    }
+                    input["wifi"]["static-properties"][a] = txt;
                     break;
             }
         }
@@ -835,12 +989,14 @@ class EmpSliceModalBox extends EmpModalBox{
             input["lte"]["vbses"][id]["static-properties"] = {};
             // input["lte"]["vbses"][id]["runtime-properties"] = {};
             // var attrbts = ["sched_id", "rbgs", "rntis"];
-            var attrbts = ["sched_id", "rbgs"];
+            var attrbts = ["sched_id", "rbgs", "window", "period"];
             for( var i=0; i<attrbts.length; i++){
                 var a = attrbts[i];
                 switch(a){
                     case "rbgs":
                     case "sched_id":
+                    case "window":
+                    case "period":
                         input["lte"]["vbses"][id]["static-properties"][a] = this.LTEdetails[id]["static-properties"][a];
                         break;
                     // case "rntis":
@@ -852,11 +1008,12 @@ class EmpSliceModalBox extends EmpModalBox{
         for(var id in this.WIFIdetails){
             input["wifi"]["wtps"][id] = {};
             input["wifi"]["wtps"][id]["static-properties"] = {};
-            var attrbts = ["amsdu_aggregation", "quantum"];
+            var attrbts = ["amsdu_aggregation", "quantum", "scheduler"];
             for( var i=0; i<attrbts.length; i++){
                 var a = attrbts[i];
                 switch(a){
                     case "quantum":
+                    case "scheduler":
                         input["wifi"]["wtps"][id]["static-properties"][a] = this.WIFIdetails[id]["static-properties"][a];
                         break;
                     case "amsdu_aggregation":
@@ -873,13 +1030,20 @@ class EmpSliceModalBox extends EmpModalBox{
                 this.qe.scheduleQuery("GET", [tag, this.qe.targets.TENANT], null, null, this.cache.update.bind(this.cache));
         }
         this.qe.scheduleQuery("POST", [tag], null, input, ff.bind(this));
-        this.f_Close();
+        
+        // console.log("ADD input", input);
+
+        var id = this.getID();
+        var m = this.hb.ge(id);
+        $( m ).modal('hide');
     }
 
     f_Update(){
+
+        // console.log("UPDATE")
         var tag = this.qe.targets.SLICE;
         // var attrbts = ["sched_id", "rbgs", "rntis", "amsdu_aggregation", "quantum"];
-        var attrbts = ["sched_id", "rbgs", "amsdu_aggregation", "quantum"];
+        var attrbts = ["sched_id", "rbgs", "window", "period", "amsdu_aggregation", "quantum", "scheduler"];
         var input = jQuery.extend(true, {}, this.selObj) ;
         input["lte"] = {};
         // input["lte"]["runtime-properties"] = {};
@@ -894,12 +1058,15 @@ class EmpSliceModalBox extends EmpModalBox{
             switch(a){
                 case "rbgs":
                 case "sched_id":
+                case "window":
+                case "period":
                     input["lte"]["static-properties"][a] = $( tmp ).val();
                     break;
                 // case "rntis":
                 //     input["lte"]["runtime-properties"][a] = $( tmp ).val();
                 //     break;
                 case "quantum":
+                case "scheduler":
                     input["wifi"]["static-properties"][a] = $( tmp ).val();
                     break;
                 case "amsdu_aggregation":
@@ -908,16 +1075,19 @@ class EmpSliceModalBox extends EmpModalBox{
             }
         }
         for(var id in this.LTEdetails){
+            // console.log("LTEdetails, id=",id);
             input["lte"]["vbses"][id] = {};
             input["lte"]["vbses"][id]["static-properties"] = {};
             // input["lte"]["vbses"][id]["runtime-properties"] = {};
             // var attrbts = ["sched_id", "rbgs", "rntis"];
-            var attrbts = ["sched_id", "rbgs"];
+            var attrbts = ["sched_id", "rbgs", "window", "period"];
             for( var i=0; i<attrbts.length; i++){
                 var a = attrbts[i];
                 switch(a){
                     case "rbgs":
                     case "sched_id":
+                    case "window":
+                    case "period":
                         input["lte"]["vbses"][id]["static-properties"][a] = this.LTEdetails[id]["static-properties"][a];
                         break;
                     // case "rntis":
@@ -929,11 +1099,12 @@ class EmpSliceModalBox extends EmpModalBox{
         for(var id in this.WIFIdetails){
             input["wifi"]["wtps"][id] = {};
             input["wifi"]["wtps"][id]["static-properties"] = {};
-            var attrbts = ["amsdu_aggregation", "quantum"];
+            var attrbts = ["amsdu_aggregation", "quantum", "scheduler"];
             for( var i=0; i<attrbts.length; i++){
                 var a = attrbts[i];
                 switch(a){
                     case "quantum":
+                    case "scheduler":
                         input["wifi"]["wtps"][id]["static-properties"][a] = this.WIFIdetails[id]["static-properties"][a];
                         break;
                     case "amsdu_aggregation":
@@ -942,21 +1113,52 @@ class EmpSliceModalBox extends EmpModalBox{
                 }
             }
         }
-//        console.log(input)
+        // console.log(input)
         var ff = function(){
             if( tag === this.qe.targets.TENANT )
                 this.qe.scheduleQuery("GET", [tag], null, null, this.cache.update.bind(this.cache));
             else
                 this.qe.scheduleQuery("GET", [tag, this.qe.targets.TENANT], null, null, this.cache.update.bind(this.cache));
         }
-        this.qe.scheduleQuery("PUT", [tag], null, input, ff.bind(this));
-        this.f_Close();
-    }
+        // console.log("UPDATE input", input);
 
-    f_Close(){
+        this.qe.scheduleQuery("PUT", [tag], null, input, ff.bind(this));
+        
         var id = this.getID();
         var m = this.hb.ge(id);
         $( m ).modal('hide');
+    }
+
+    f_Close(){
+        var str = "";
+        for( var a in this.toUpdate ){
+            if( this.toUpdate[a] ){
+                str += a + " ";
+            }
+        }
+        if( str.length != 0){
+            var f_YES = function(){
+                    $( modal ).modal('hide');
+                    var id = this.getID();
+                    var m = this.hb.ge(id);
+                    $( m ).modal('hide');
+                };
+            var modal = generateWarningModal("Discard all changes to: " + str, f_YES.bind(this));
+            $( modal ).modal();
+        }
+        else{
+            var id = this.getID();
+            var m = this.hb.ge(id);
+            $( m ).modal('hide');
+        }
+    }
+
+    f_Download(args){
+        var title = args[0];
+        var json = args[1];
+        var txt = JSON.stringify(json, undefined, 4);
+        var filename = __USERNAME.toUpperCase() + "_" + title + "_" +Date.now()+".txt";
+        this.hb.fdownload(txt, filename);
     }
 
 }

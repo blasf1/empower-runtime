@@ -20,11 +20,15 @@
 from construct import UBInt8
 from construct import UBInt16
 from construct import UBInt32
+from construct import UBInt64
 from construct import Bytes
 from construct import Sequence
 from construct import Container
 from construct import Struct
 from construct import Array
+
+from datetime import datetime
+from datetime import timedelta
 
 from empower.lvapp.lvappserver import ModuleLVAPPWorker
 from empower.core.app import EmpowerApp
@@ -40,7 +44,7 @@ PT_WIFI_STATS_RESPONSE = 0x38
 
 ENTRY_TYPE = Sequence("entries",
                       UBInt8("type"),
-                      UBInt32("timestamp"),
+                      UBInt64("timestamp"),
                       UBInt32("sample"))
 
 WIFI_STATS_REQUEST = Struct("wifi_stats_request", UBInt8("version"),
@@ -77,10 +81,12 @@ class WiFiStats(ModulePeriodic):
 
         # data structures
         self.wifi_stats = {}
+        self.agent_ts_ref = 0
+        self.runtime_ts_ref = None
+        self.last_runtime_ts = None
         self.tx_per_second = 0
         self.rx_per_second = 0
         self.ed_per_second = 0
-        self.last = {}
 
     def __eq__(self, other):
         return super().__eq__(other) and self.block == other.block
@@ -139,6 +145,9 @@ class WiFiStats(ModulePeriodic):
         out = super().to_dict()
         out['block'] = self.block.to_dict()
         out['wifi_stats'] = self.wifi_stats
+        out['stats_per_second'] = {'tx_per_second': self.tx_per_second,
+                                   'rx_per_second': self.rx_per_second,
+                                   'ed_per_second': self.ed_per_second}
 
         return out
 
@@ -173,8 +182,8 @@ class WiFiStats(ModulePeriodic):
                         channel=self.block.channel,
                         band=self.block.band)
 
-        self.log.info("Sending %s request to %s (id=%u)",
-                      self.MODULE_NAME, self.block, self.module_id)
+        # self.log.info("Sending %s request to %s (id=%u)",
+        #               self.MODULE_NAME, self.block, self.module_id)
 
         msg = WIFI_STATS_REQUEST.build(req)
         wtp.connection.stream.write(msg)
@@ -190,47 +199,78 @@ class WiFiStats(ModulePeriodic):
         # update this object
         self.wifi_stats.clear()
 
-        tran = response.entries[0:100]
-        recv = response.entries[100:200]
-        edet = response.entries[200:300]
+        # entry[0] = stat type [0, 1, 2] -> [tx, rx, ed]
+        # entry[1] = agent timestamp
+        # entry[2] = stat value
 
-        self.wifi_stats['tx'] = []
-        for entry in tran:
-            value = {'type': entry[0],
-                     'timestamp': entry[1],
-                     'sample': entry[2] / 180.0, }
-            self.wifi_stats['tx'].append(value)
+        # pre-processing: ed = ed - (rx + tx)
+        # tx: 0:100, rx: 100:200, ed: 200:300
+        for index in range(200, 300):
+            response.entries[index][2] -= (response.entries[index - 100][2]
+                                           + response.entries[index - 200][2])
 
-        self.wifi_stats['rx'] = []
-        for entry in recv:
-            value = {'type': entry[0],
-                     'timestamp': entry[1],
-                     'sample': entry[2] / 180.0, }
-            self.wifi_stats['rx'].append(value)
+            first_ts = datetime.utcfromtimestamp(
+                response.entries[index - 1][1] / 1000000)
+            second_ts = datetime.utcfromtimestamp(
+                response.entries[index][1] / 1000000)
+            if second_ts - first_ts > timedelta(days=1):
+                # ignore sample buffers with mixed timestamps
+                return
 
-        self.wifi_stats['ed'] = []
-        for entry in edet:
-            value = {'type': entry[0],
-                     'timestamp': entry[1],
-                     'sample': entry[2] / 180.0, }
-            self.wifi_stats['ed'].append(value)
+        generic_ts = datetime.utcfromtimestamp(response.entries[0][1] / 1000000)
+        shift_ts = False
 
-        if 'tx' in self.last:
-            self.tx_per_second = \
-                self.update_stats(self.wifi_stats['tx'], 'tx')
-        if 'rx' in self.last:
-            self.rx_per_second = \
-                self.update_stats(self.wifi_stats['rx'], 'rx')
-        if 'ed' in self.last:
-            self.ed_per_second = \
-                self.update_stats(self.wifi_stats['ed'], 'ed')
+        if datetime.utcnow() - generic_ts > timedelta(days=1):
+            # in case the wtp has not a valid datetime, shift its sample
+            # timestamps to the controller datetime
+            shift_ts = True
 
-        self.last['tx'] = \
-            max([sample['timestamp'] for sample in self.wifi_stats['tx']])
-        self.last['rx'] = \
-            max([sample['timestamp'] for sample in self.wifi_stats['rx']])
-        self.last['ed'] = \
-            max([sample['timestamp'] for sample in self.wifi_stats['ed']])
+            if self.agent_ts_ref == 0:
+                # at the beginning, create the map
+                # between runtime and agent timestamps
+                for entry in response.entries:
+                    if entry[1] > self.agent_ts_ref:
+                        self.agent_ts_ref = entry[1]
+                self.runtime_ts_ref = datetime.utcnow()
+
+        for entry in response.entries:
+
+            stat_type = ["tx", "rx", "ed"][entry[0]]
+            if stat_type not in self.wifi_stats:
+                self.wifi_stats[stat_type] = []
+
+            if shift_ts:
+                ts_delta = timedelta(microseconds=(entry[1] -
+                                                   self.agent_ts_ref))
+                sample_ts = self.runtime_ts_ref + ts_delta
+            else:
+                sample_ts = datetime.utcfromtimestamp(entry[1] / 1000000)
+
+            value = entry[2] / 180.0
+
+            # skip invalid samples
+            if abs(value) == 200:  # tx, rx: 200; ed: 200 - (200 + 200)
+                continue
+
+            sample = {
+                "measurement": stat_type,
+                "tags": {
+                    "tenant": str(self.tenant_id),
+                    "block": str(self._block)
+                },
+                "time": sample_ts,
+                "fields": {
+                    "value": value
+                }
+            }
+            self.wifi_stats[stat_type].append(sample)
+
+        if self.last_runtime_ts:
+            self.tx_per_second = self.update_stats(self.wifi_stats['tx'])
+            self.rx_per_second = self.update_stats(self.wifi_stats['rx'])
+            self.ed_per_second = self.update_stats(self.wifi_stats['ed'])
+
+        self.last_runtime_ts = datetime.utcnow()
 
         # update wifi_stats module
         self.block.wifi_stats = self.wifi_stats
@@ -238,15 +278,19 @@ class WiFiStats(ModulePeriodic):
         # call callback
         self.handle_callback(self)
 
-    def update_stats(self, stats, stats_type):
+        # update Influxdb
+        self.update_db([sample for measurements in self.wifi_stats.values()
+                        for sample in measurements])
+
+    def update_stats(self, stats):
         """Update stats."""
 
         avg_sec = 0
         nb_samples = 0
 
-        for _, sample in enumerate(stats):
-            if sample['timestamp'] > self.last[stats_type]:
-                avg_sec += sample['sample']
+        for sample in stats:
+            if sample['time'] > self.last_runtime_ts:
+                avg_sec += sample['fields']['value']
                 nb_samples += 1
 
         if nb_samples == 0:

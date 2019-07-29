@@ -205,8 +205,8 @@ class RSSI(ModuleTrigger):
                         value=self.value,
                         period=self.period)
 
-        self.log.info("Sending %s request to %s (id=%u)",
-                      self.MODULE_NAME, wtp.addr, self.module_id)
+        # self.log.info("Sending %s request to %s (id=%u)",
+        #               self.MODULE_NAME, wtp.addr, self.module_id)
 
         self.wtps.append(wtp)
 

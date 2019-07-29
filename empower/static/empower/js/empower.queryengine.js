@@ -21,6 +21,7 @@ class EmpQueryEngine{
         this.targets.LVNF = "lvnfs";
         this.targets.ACL = "acl";
         this.targets.UE_MEASUREMENT = "ue_measurements";
+        this.targets.UE = "ues";
         this.targets.TR = "trs";
         this.targets.SLICE = "slices";
 
@@ -50,13 +51,22 @@ class EmpQueryEngine{
                 // console.log("processQueryQueue: qstatus ", t.querystatus);
                 t.querystatus = 1;
                 var data = t.queryqueue.shift();
-                return t.runQuery.bind(this).apply(null, data).promise().then(
-                    function(){
-                        t.querystatus = t.querystatus - 1;
-                        // console.log("processQueryQueue: DONE qstatus ", t.querystatus);
-                        return t.processQueryQueue(t);
-                    }
-                )
+                try{
+                    return t.runQuery.bind(this).apply(null, data).promise().then(
+                        function(){
+                            t.querystatus = t.querystatus - 1;
+                            // console.log("processQueryQueue: DONE qstatus ", t.querystatus);
+                            return t.processQueryQueue(t);
+                        }
+                    )
+                }
+                catch(e){
+                    console.log (e);
+                    t.querystatus = t.querystatus - 1;
+                    // console.log("processQueryQueue: DONE qstatus ", t.querystatus);
+                    $( "#navbar_pendingQuery" ).text("Last query FAILED!");
+                    return t.processQueryQueue(t);
+                }
             }
             else if (this.querystatus === 1){
                 // console.log("processQueryQueue: qstatus ", this.querystatus);
@@ -103,7 +113,7 @@ class EmpQueryEngine{
     }
 
     performQuery(type="GET",target,  tenant_id, values){
-                return $.ajax(this.getRequestParams(type, target, tenant_id, values));
+        return $.ajax(this.getRequestParams(type, target, tenant_id, values));
     }
 
     getRequestParams(type, target, tenant_id, values){
@@ -138,92 +148,23 @@ class EmpQueryEngine{
                     url = this.DELETEQueryURL(target, values.tenant_id) + values.match;
                 }
                 break;
-            case this.targets.SLICE:
+                case this.targets.SLICE:
                 if( type === "POST"){
                     url = this.POSTQueryURL(target, values.tenant_id);
                     dataType = "text";
-                    data = '{ "version" : "1.0", "dscp" : "' + values["dscp"] + '",';
-                    data += '"lte": { "static-properties": { '
-                    if( values["lte"]["static-properties"]["rbgs"] ) data += '"rbgs" : "' + values["lte"]["static-properties"]["rbgs"] + '",';
-                    if( values["lte"]["static-properties"]["sched_id"] ) data += '"sched_id" : "' + values["lte"]["static-properties"]["sched_id"] + '",';
-                    data = data.substr(0,data.length-1) + ' },'
-                    // data += '"runtime-properties": { '
-                    // if( values["lte"]["runtime-properties"]["rntis"] ) data += '"rntis" : ' + values["lte"]["runtime-properties"]["rntis"] + '';
-                    // data += ' },'
-                    data += '"vbses": { ';
-                        for( var vbs in values["lte"]["vbses"] ){
-                            data += '"' + vbs + '": { "static-properties": { '
-                            if( values["lte"]["vbses"][vbs]["static-properties"]["rbgs"] ) data += '"rbgs" : "' + values["lte"]["vbses"][vbs]["static-properties"]["rbgs"] + '",';
-                            if( values["lte"]["vbses"][vbs]["static-properties"]["sched_id"] ) data += '"sched_id" : "' + values["lte"]["vbses"][vbs]["static-properties"]["sched_id"] + '",';
-                            data = data.substr(0,data.length-1) + ' },'
-                            // data += '"runtime-properties": {'
-                            // if( values["lte"]["vbses"][vbs]["runtime-properties"]["rntis"] ) data += '"rntis" : ' + values["lte"]["vbses"][vbs]["runtime-properties"]["rntis"] + '';
-                            // data += ' },'
-                            if( values["lte"]["vbses"][vbs]["cells"] ) data += '"cells" : ' + values["lte"]["vbses"][vbs]["cells"] + ',';
-                            data = data.substr(0,data.length-1) + ' },'
-                        }
-                    data = data.substr(0,data.length-1) + ' }'
-                    data += ' },'
-                    data += '"wifi": { "static-properties": {'
-                    if( values["wifi"]["static-properties"]["quantum"] ) data += '"quantum" : "' + values["wifi"]["static-properties"]["quantum"] + '",';
-                    if( values["wifi"]["static-properties"]["amsdu_aggregation"] ) data += '"amsdu_aggregation" : "' + values["wifi"]["static-properties"]["amsdu_aggregation"] + '",';
-                    data = data.substr(0,data.length-1) + ' },'
-                    data += '"wtps": { ';
-                        for( var wtp in values["wifi"]["wtps"] ){
-                            data += '"' + wtp + '": { "static-properties": { '
-                            if( values["wifi"]["wtps"][wtp]["static-properties"]["quantum"] ) data += '"quantum" : "' + values["wifi"]["wtps"][wtp]["static-properties"]["quantum"] + '",';
-                            if( values["wifi"]["wtps"][wtp]["static-properties"]["amsdu_aggregation"] ) data += '"amsdu_aggregation" : "' + values["wifi"]["wtps"][wtp]["static-properties"]["amsdu_aggregation"] + '",';
-                            data = data.substr(0,data.length-1) + ' },'
-                            if( values["wifi"]["wtps"][wtp]["blocks"] ) data += '"blocks" : ' + values["wifi"]["wtps"][wtp]["blocks"] + ',';
-                            data = data.substr(0,data.length-1) + ' },'
-                        }
-                    data = data.substr(0,data.length-1) + ' }'
-                    data += ' }'
-                    data += ' }'
+                    data = values;
+                    data.version = "1.0";
+                    data = JSON.stringify(data);
                 }
                 else if( type === "PUT"){
                     url = this.PUTQueryURL(target, values.tenant_id) + values.dscp;
                     dataType = "text";
-                    data = '{ "version" : "1.0", ';
-                    data += '"lte": { "static-properties": { '
-                    if( values["lte"]["static-properties"]["rbgs"] ) data += '"rbgs" : "' + values["lte"]["static-properties"]["rbgs"] + '",';
-                    if( values["lte"]["static-properties"]["sched_id"] ) data += '"sched_id" : "' + values["lte"]["static-properties"]["sched_id"] + '",';
-                    data = data.substr(0,data.length-1) + ' },'
-                    // data += '"runtime-properties": { '
-                    // if( values["lte"]["runtime-properties"]["rntis"] ) data += '"rntis" : ' + values["lte"]["runtime-properties"]["rntis"] + '';
-                    // data += ' },'
-                    data += '"vbses": { ';
-                        for( var vbs in values["lte"]["vbses"] ){
-                            data += '"' + vbs + '": { "static-properties": { '
-                            if( values["lte"]["vbses"][vbs]["static-properties"]["rbgs"] ) data += '"rbgs" : "' + values["lte"]["vbses"][vbs]["static-properties"]["rbgs"] + '",';
-                            if( values["lte"]["vbses"][vbs]["static-properties"]["sched_id"] ) data += '"sched_id" : "' + values["lte"]["vbses"][vbs]["static-properties"]["sched_id"] + '",';
-                            data = data.substr(0,data.length-1) + ' },'
-                            // data += '"runtime-properties": {'
-                            // if( values["lte"]["vbses"][vbs]["runtime-properties"]["rntis"] ) data += '"rntis" : ' + values["lte"]["vbses"][vbs]["runtime-properties"]["rntis"] + '';
-                            // data += ' },'
-                            if( values["lte"]["vbses"][vbs]["cells"] ) data += '"cells" : ' + values["lte"]["vbses"][vbs]["cells"] + ',';
-                            data = data.substr(0,data.length-1) + ' },'
-                        }
-                    data = data.substr(0,data.length-1) + ' }'
-                    data += ' },'
-                    data += '"wifi": { "static-properties": {'
-                    if( values["wifi"]["static-properties"]["quantum"] ) data += '"quantum" : "' + values["wifi"]["static-properties"]["quantum"] + '",';
-                    if( values["wifi"]["static-properties"]["amsdu_aggregation"] ) data += '"amsdu_aggregation" : "' + values["wifi"]["static-properties"]["amsdu_aggregation"] + '",';
-                    data = data.substr(0,data.length-1) + ' },'
-                    data += '"wtps": { ';
-                        for( var wtp in values["wifi"]["wtps"] ){
-                            data += '"' + wtp + '": { "static-properties": { '
-                            if( values["wifi"]["wtps"][wtp]["static-properties"]["quantum"] ) data += '"quantum" : "' + values["wifi"]["wtps"][wtp]["static-properties"]["quantum"] + '",';
-                            if( values["wifi"]["wtps"][wtp]["static-properties"]["amsdu_aggregation"] ) data += '"amsdu_aggregation" : "' + values["wifi"]["wtps"][wtp]["static-properties"]["amsdu_aggregation"] + '",';
-                            data = data.substr(0,data.length-1) + ' },'; console.log( values["wifi"]["wtps"][wtp]["blocks"] )
-                            if( values["wifi"]["wtps"][wtp]["blocks"] ) data += '"blocks" : ' + values["wifi"]["wtps"][wtp]["blocks"] + ',';
-                            data = data.substr(0,data.length-1) + ' },'
-                        }
-                    data = data.substr(0,data.length-1) + ' }'
-                    data += ' }'
-                    data += ' }'
+                    data = values;
+                    data.version = "1.0";
+                    data = JSON.stringify(data);
                 }
                 else if( type === "DELETE"){
+                    console.log(values);
                     url = this.DELETEQueryURL(target, values.tenant_id) + values.dscp;
                 }
                 break;
@@ -281,14 +222,80 @@ class EmpQueryEngine{
                         }
                 break;
             case this.targets.LVAP:
-                if( type === "PUT" ){   // values[ LVAP, new WTP, Block hwaddr ]
-                    url = this.PUTQueryURL(target, tenant_id)+ values[0].addr; console.log(values)
-                    dataType = "text";
-                    if( values[2] )
-                        data = '{  "version": "1.0", "wtp" : "' + values[1].addr + '", "blocks" : "' + values[2] + '"  }';
-                    else
-                    data = '{  "version": "1.0", "wtp" : "' + values[1].addr + '"  }';
+                if( type === "PUT" ){   
+                    console.warn("VALUES: ",values);
+
+                    data = {
+                        version: "1.0"
+                    }
+                    if (values.wtp)
+                        data.wtp =  values.wtp.addr;
+                    
+                    if (values.block){
+                        if (values.block !== null){
+                            data.blocks = [];
+                            var block = {}
+                            if (values.wtp)
+                                block.wtp = values.wtp.addr;
+                            else
+                                console.warn("NO WTP provided for LVAP WTP block update")
+                            block.hwaddr = values.block.hwaddr;
+                            block.channel = values.block.channel;
+                            block.band = values.block.band;
+
+                            // console.log(data);
+                            // console.log(data.blocks);
+                            data.blocks.push(block);
                         }
+                    }
+
+                    data = JSON.stringify(data);
+
+                    console.log(data);
+
+                    if (values.lvap === null){
+                        console.error("Missing LVAP params");
+                    }
+
+                    url = this.PUTQueryURL(target, tenant_id)+values.lvap.addr; 
+
+                    console.log(url);
+                    
+                    dataType = "text";                   
+                }
+                break;
+            case this.targets.UE:
+                if( type === "PUT" ){
+
+                    console.warn("VALUES: ",values);
+
+                    data = {
+                        version: "1.0"
+                    }
+
+                    if (values.vbs)
+                        data.vbs =  values.vbs.addr;
+                    
+                    if (values.cell)
+                        data.cell = values.cell;
+
+                    if (values.slice)
+                        data.slice = values.slice.dscp;
+
+                    data = JSON.stringify(data);
+
+                    console.log(data);
+
+                    if (values.ue === null){
+                        console.error("Missing UE params");
+                    }
+
+                    url = this.PUTQueryURL(target, tenant_id)+values.ue.ue_id; 
+
+                    console.log(url);
+                    
+                    dataType = "text";
+                }
                 break;
             case this.targets.CPP:
             case this.targets.VBS:
@@ -451,6 +458,7 @@ class EmpQueryEngine{
         switch(target){
             case this.targets.ACCOUNT:
             case this.targets.LVAP:
+            case this.targets.UE:
             case this.targets.SLICE:
                 if (tenant_id) {
                     url = "/api/v1/tenants/" + tenant_id + "/" + target  + "/"

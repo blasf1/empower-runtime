@@ -70,6 +70,7 @@ PT_STATUS_SLICE = 0x58
 PT_SLICE_STATUS_REQUEST = 0x61
 PT_IGMP_REPORT = 0x48
 PT_INCOMING_MCAST_ADDR = 0x46
+PT_WTP_CHANNEL_UPDATE_REQUEST = 0X70 #Define packet for channel update
 
 HEADER = Struct("header", UBInt8("version"),
                 UBInt8("type"),
@@ -343,6 +344,7 @@ SET_SLICE = \
            UBInt8("channel"),
            UBInt8("band"),
            UBInt32("quantum"),
+           UBInt32("scheduler"),
            UBInt8("dscp"),
            Bytes("ssid", WIFI_NWID_MAXSIZE + 1))
 
@@ -371,6 +373,7 @@ STATUS_SLICE = \
            UBInt8("channel"),
            UBInt8("band"),
            UBInt32("quantum"),
+           UBInt32("scheduler"),
            UBInt8("dscp"),
            Bytes("ssid", WIFI_NWID_MAXSIZE + 1))
 
@@ -392,6 +395,16 @@ INCOMING_MCAST_ADDR = Struct("incoming_mcast_address", UBInt8("version"),
                              Bytes("hwaddr", 6),
                              UBInt8("channel"),
                              UBInt8("band"))
+
+#TFM: define packet struct
+WTP_CHANNEL_UPDATE_REQUEST = Struct("channel_request", UBInt8("version"),
+                       UBInt8("type"),
+                       UBInt32("length"),
+                       UBInt32("seq"),
+                       UBInt8("channel"),
+                       Bytes("hwaddr", 6),
+                       UBInt8("old_channel"),
+                       UBInt8("band"))
 
 PT_TYPES = {PT_BYE: None,
             PT_REGISTER: None,
@@ -427,7 +440,8 @@ PT_TYPES = {PT_BYE: None,
             PT_SET_SLICE: SET_SLICE,
             PT_DEL_SLICE: DEL_SLICE,
             PT_IGMP_REPORT: IGMP_REPORT,
-            PT_INCOMING_MCAST_ADDR: INCOMING_MCAST_ADDR}
+            PT_INCOMING_MCAST_ADDR: INCOMING_MCAST_ADDR,
+            PT_WTP_CHANNEL_UPDATE_REQUEST: WTP_CHANNEL_UPDATE_REQUEST} #TFM: assign definition to the struct
 
 
 PT_TYPES_HANDLERS = {}

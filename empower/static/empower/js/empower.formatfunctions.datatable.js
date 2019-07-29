@@ -204,38 +204,49 @@ function ff_Ue_Table( ctrl ){ // input param: ctrl = "h" for header table / "d" 
     var params = [];
     if( ctrl === "h" ){
         params.push( [ { "type": "i", "value": "fa-key"},
-                        { "type": "k", "value": "IMSI",
+                        { "type": "k", "value": "UE ID",
                             "style": "color:" + BLUE },
                          ]);
-        params.push( [ { "type": "h", "value": "UE id"},
+        params.push( [ { "type": "h", "value": "IMSI"},
                          ]);
+        params.push( [ { "type": "h", "value": "TMSI"},
+                        ]);
         params.push( [ { "type": "h", "value": "RNTI"},
                          ]);
         params.push( [ { "type": "h", "value": "PLMN ID"},
                          ]);
         params.push( [ { "type": "h", "value": "VBS"},
                          ]);
+        params.push( [ { "type": "h", "value": "Slice"},
+                        ]);
         params.push( [ { "type": "h", "value": "State"},
                          ]);
     }
     else if ( ctrl === "d" ){
-        params.push( [ { "type": "k", "attr": "imsi",
+        params.push( [ { "type": "k", "attr": "ue_id",
                             "style": "color:" + BLUE },
                          ]);
-        params.push( [ { "type": "a", "attr": "ue_id"},
+        params.push( [ { "type": "a", "attr": "imsi"},
                          ]);
+        params.push( [ { "type": "a", "attr": "tmsi"},
+                        ]);
         params.push( [ { "type": "a", "attr": "rnti"},
                          ]);
-        params.push( [ { "type": "a", "attr": "plmnid"},
+        params.push( [ { "type": "a", "attr": "plmn_id"},
                          ]);
-        params.push( [ { "type": "a", "attr": "vbs"},
-                         ]);
-        params.push( [ { "type": "i", "attr": "state",
-                            "icon": "fa-circle",
-                            "color": {"ho_in_progress_removing": RED,
-                                        "ho_in_progress_adding": YELLOW,
-                                        "active":GREEN} },
-                         ]);
+        params.push( [ { "type": "o", "attr": "vbs"},
+                        ]);
+        params.push( [ { "type": "a", "attr": "slice"},
+                        ]);
+                        params.push( [ { "type": "i", "attr": "state",
+                        "icon": "fa-circle",
+                        "color": {  "stopped": RED,
+                                    "stopping": YELLOW,
+                                    "running": GREEN,
+                                    "spawning": BLUE,
+                                    "migrating_stop": YELLOW,
+                                    "migrating_start": YELLOW} },
+                        ]);
     }
     return params;
 };
@@ -347,15 +358,24 @@ function ff_TR_Table( ctrl ){ // input param: ctrl = "h" for header table / "d" 
 function ff_Slice_Table( ctrl ){ // input param: ctrl = "h" for header table / "d" for data table
     var params = [];
     if( ctrl === "h" ){
-        params.push( [ { "type": "h", "value": "Tenant ID"},
+        params.push( [ { "type": "i", "value": "fa-key"},
+                        { "type": "k", "value": "Tenant ID",
+                        "style": "color:" + BLUE }
                          ]);
-        params.push( [ { "type": "h", "value": "Tag"},
-                         ]);
+        params.push( [ { "type": "i", "value": "fa-key"},
+                         { "type": "k", "value": "Tag",
+                         "style": "color:" + BLUE }
+                          ]);
     }
     else if ( ctrl === "d" ){
-        params.push( [ { "type": "a", "attr": "tenant_id"},
+        params.push( [ { "type": "f", "attr": "tenant_id",
+                        "fname": "get_tenant_name" },
+                        { "type": "s", "txt": ": "},
+                        { "type": "k", "attr": "tenant_id",
+                        "style": "color:" + BLUE },
                          ]);
-        params.push( [ { "type": "a", "attr": "dscp"},
+        params.push( [ { "type": "k", "attr": "dscp",
+                         "style": "color:" + BLUE }
                          ]);
     }
     return params;
