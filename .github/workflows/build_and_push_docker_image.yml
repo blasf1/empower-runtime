@@ -12,9 +12,9 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Create launcher.sh
+      - name: Create entrypoint.sh
         run: |
-          cat << EOF > launcher.sh
+          cat << EOF > entrypoint.sh
           #!/bin/sh
           _term() {
             echo "Caught SIGTERM signal!"
@@ -22,7 +22,7 @@ jobs:
           }
           wait-for influxdb:8086 -- wait-for mongo:27017 -- python3 /empower-runtime.py
           EOF
-          chmod +x launcher.sh
+          chmod +x entrypoint.sh
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3

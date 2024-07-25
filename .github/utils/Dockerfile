@@ -2,7 +2,7 @@ FROM ubuntu:24.04 AS empower-runtime
 
 
 # Install requirements and dependencies
-RUN buildDeps='python3-pip netcat-traditional' \
+RUN buildDeps='python3-pip wget netcat-traditional' \
     && set -x \
     && apt-get update \
     && apt-get install -y $buildDeps \
@@ -26,10 +26,10 @@ RUN rm -rf /.git /.gitignore /.github \
     && ln -s /webui /var/www/empower
 
 # Add the launcher script
-ADD launcher.sh /
+ADD entrypoint.sh /
 
 # Define the entrypoint
-ENTRYPOINT ["/launcher.sh"]
+ENTRYPOINT ["/entrypoint.sh"]
 
 # Expose Web GUI
 EXPOSE 8888
