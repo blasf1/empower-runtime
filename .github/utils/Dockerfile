@@ -13,7 +13,9 @@ RUN buildDeps='python3-pip netcat-traditional' \
     && pip3 install pymodm==0.4.3 --break-system-packages\
     && pip3 install influxdb==5.3.1 --break-system-packages\
     && pip3 install python-stdnum==1.17 --break-system-packages\
-    && pip3 install requests==2.28.1 --break-system-packages
+    && pip3 install requests==2.28.1 --break-system-packages\
+    && wget https://github.com/eficode/wait-for/releases/download/v2.2.4/wait-for -P /bin \
+    && chmod +x /bin/wait-for 
 
 COPY . /
 
